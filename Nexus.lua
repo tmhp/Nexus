@@ -10,12 +10,11 @@ local UIS = game:GetService("UserInputService")
 local HttpSrv = game:GetService("HttpService")
 local LP = Players.LocalPlayer
 
--- SET YOUR BASE URL HERE (raw GitHub, pastebin, etc.)
--- Example: "https://raw.githubusercontent.com/YourUser/YourRepo/main/"
+-- GitHub repo: tmhp/Nexus
 local BASE_URL = "https://raw.githubusercontent.com/tmhp/Nexus/refs/heads/main/"
 
 local function fetchScript(path)
-    return HttpSrv:GetAsync(BASE_URL .. path)
+    return game:HttpGet(BASE_URL .. path)
 end
 
 -- Cleanup previous instance
