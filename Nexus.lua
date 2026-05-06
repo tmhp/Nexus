@@ -23,7 +23,15 @@ if LP.PlayerGui:FindFirstChild("Nexus_Panel") then
 end
 
 ---------- LOAD UI LIBRARY ----------
-local UI = loadstring(fetchScript("UILib.lua"))()
+local uiSuccess, UI = pcall(function()
+    local src = fetchScript("UILib.lua")
+    return loadstring(src)()
+end)
+
+if not uiSuccess then
+    warn("[Nexus] Failed to load UILib: " .. tostring(UI))
+    return
+end
 
 local C = UI.Theme
 
