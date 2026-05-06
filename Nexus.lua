@@ -12,7 +12,7 @@ local LP = Players.LocalPlayer
 
 -- SET YOUR BASE URL HERE (raw GitHub, pastebin, etc.)
 -- Example: "https://raw.githubusercontent.com/YourUser/YourRepo/main/"
-local BASE_URL = "https://raw.githubusercontent.com/tmhp/Nexus/refs/heads/main/Nexus"
+local BASE_URL = "https://raw.githubusercontent.com/tmhp/Nexus/refs/heads/main/"
 
 local function fetchScript(path)
     return HttpSrv:GetAsync(BASE_URL .. path)
