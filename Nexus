@@ -1,5 +1,5 @@
 --[[
-    NX Panel v3.0 — Main Loader
+    Nexus v3.0 — Main Loader
     Modular multi-game cheat GUI
     Toggle: RightShift | Minimize: RightControl
 ]]
@@ -7,22 +7,30 @@
 local Players = game:GetService("Players")
 local TweenSrv = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
+local HttpSrv = game:GetService("HttpService")
 local LP = Players.LocalPlayer
 
+-- SET YOUR BASE URL HERE (raw GitHub, pastebin, etc.)
+-- Example: "https://raw.githubusercontent.com/YourUser/YourRepo/main/"
+local BASE_URL = "https://raw.githubusercontent.com/CHANGE_ME/CHANGE_ME/main/"
+
+local function fetchScript(path)
+    return HttpSrv:GetAsync(BASE_URL .. path)
+end
+
 -- Cleanup previous instance
-if LP.PlayerGui:FindFirstChild("NX_Panel") then
-    LP.PlayerGui:FindFirstChild("NX_Panel"):Destroy()
+if LP.PlayerGui:FindFirstChild("Nexus_Panel") then
+    LP.PlayerGui:FindFirstChild("Nexus_Panel"):Destroy()
 end
 
 ---------- LOAD UI LIBRARY ----------
--- Place UILib.lua in your executor's workspace folder
--- Then run this script (CheatGUI.lua) from the executor
-local UI = loadstring(readfile("UILib.lua"))()
+local UI = loadstring(fetchScript("UILib.lua"))()
 
 local C = UI.Theme
 
 ---------- GAME MODULE REGISTRY ----------
 local GameModules = {
+    ["Universal"]      = "Games/Universal",
     ["Blox Fruits"]    = "Games/BloxFruits",
     ["Arsenal"]        = "Games/Arsenal",
     ["Da Hood"]        = "Games/DaHood",
@@ -39,11 +47,11 @@ local TABS = {"Combat","Movement","Visual","Player","World","Misc","Settings"}
 local tabBtns = {}
 local activeTab = nil
 local activeGamePages = {}
-local currentGame = "Blox Fruits"
+local currentGame = "Universal"
 
 ---------- ROOT GUI ----------
 local gui = Instance.new("ScreenGui")
-gui.Name = "NX_Panel"
+gui.Name = "Nexus_Panel"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = LP.PlayerGui
@@ -107,7 +115,7 @@ local title = Instance.new("TextLabel", topbar)
 title.Size = UDim2.new(0, 100, 1, 0)
 title.Position = UDim2.new(0, 16, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "NX"
+title.Text = "Nexus"
 title.TextColor3 = C.accent
 title.Font = Enum.Font.GothamBold
 title.TextSize = 18
@@ -115,9 +123,9 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 
 local subtitle = Instance.new("TextLabel", topbar)
 subtitle.Size = UDim2.new(0, 80, 1, 0)
-subtitle.Position = UDim2.new(0, 42, 0, 1)
+subtitle.Position = UDim2.new(0, 68, 0, 1)
 subtitle.BackgroundTransparency = 1
-subtitle.Text = "PANEL"
+subtitle.Text = ""
 subtitle.TextColor3 = C.dim
 subtitle.Font = Enum.Font.GothamSemibold
 subtitle.TextSize = 12
@@ -296,7 +304,7 @@ UI.section(settingsPage, "Keybinds", 14)
 UI.keybind(settingsPage, "Toggle GUI", Enum.KeyCode.RightShift, nil, 15)
 UI.keybind(settingsPage, "Panic Key", Enum.KeyCode.End, nil, 16)
 UI.section(settingsPage, "About", 18)
-UI.label(settingsPage, "NX Panel v3.0 — Modular Multi-Game GUI", 19)
+UI.label(settingsPage, "Nexus v3.0 — Modular Multi-Game GUI", 19)
 UI.label(settingsPage, "All features are placeholders for development.", 20)
 
 ---------- GAME MODULE LOADING ----------
@@ -317,7 +325,7 @@ local function loadGameModule(gameName)
     local modulePath = GameModules[gameName]
     if modulePath then
         local success, loader = pcall(function()
-            return loadstring(readfile(modulePath .. ".lua"))()
+            return loadstring(fetchScript(modulePath .. ".lua"))()
         end)
         if success and loader then
             local pages = loader(UI, content)
@@ -510,7 +518,7 @@ wmText.TextXAlignment = Enum.TextXAlignment.Left
 spawn(function()
     while gui and gui.Parent do
         local fps = math.floor(1 / game:GetService("RunService").RenderStepped:Wait())
-        wmText.Text = "NX v3.0 | " .. fps .. " FPS | " .. os.date("%H:%M")
+        wmText.Text = "Nexus v3.0 | " .. fps .. " FPS | " .. os.date("%H:%M")
         task.wait(0.5)
     end
 end)
@@ -541,8 +549,8 @@ spawn(function()
 end)
 
 ---------- INIT ----------
-loadGameModule("Blox Fruits")
+loadGameModule("Universal")
 switchTab("Combat")
-UI.notify("NX Panel", "GUI loaded — RightShift to toggle", 3)
+UI.notify("Nexus", "GUI loaded — RightShift to toggle", 3)
 
-print("[NX Panel v3.0] Loaded successfully")
+print("[Nexus v3.0] Loaded successfully")
