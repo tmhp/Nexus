@@ -238,12 +238,13 @@ gameFrame.BorderSizePixel = 0
 UI.corner(gameFrame, 6)
 UI.stroke(gameFrame, C.accent, 1)
 
-local gameIcon = Instance.new("TextLabel", gameFrame)
-gameIcon.Size = UDim2.new(0, 20, 1, 0)
-gameIcon.Position = UDim2.new(0, 8, 0, 0)
+local gameIcon = Instance.new("ImageLabel", gameFrame)
+gameIcon.Size = UDim2.new(0, 16, 0, 16)
+gameIcon.Position = UDim2.new(0, 9, 0.5, -8)
 gameIcon.BackgroundTransparency = 1
-gameIcon.Text = "🎮"
-gameIcon.TextSize = 14
+gameIcon.Image = "rbxassetid://82270605307346"
+gameIcon.ImageColor3 = C.accent
+gameIcon.ScaleType = Enum.ScaleType.Fit
 
 local gameLbl = Instance.new("TextLabel", gameFrame)
 gameLbl.Size = UDim2.new(1, -50, 1, 0)
@@ -387,17 +388,21 @@ function switchTab(name)
 
     -- Deactivate old button
     if activeTab and tabBtns[activeTab] then
-        UI.tween(tabBtns[activeTab].btn, {BackgroundTransparency = 1}, 0.2)
-        UI.tween(tabBtns[activeTab].btn, {TextColor3 = C.dim}, 0.2)
-        UI.tween(tabBtns[activeTab].ind, {BackgroundTransparency = 1}, 0.2)
+        local old = tabBtns[activeTab]
+        UI.tween(old.btn, {BackgroundTransparency = 1}, 0.2)
+        UI.tween(old.ind, {BackgroundTransparency = 1}, 0.2)
+        if old.icon then UI.tween(old.icon, {ImageColor3 = C.dim}, 0.2) end
+        if old.lbl then UI.tween(old.lbl, {TextColor3 = C.dim}, 0.2) end
     end
 
     activeTab = name
 
     -- Activate new button
-    UI.tween(tabBtns[name].btn, {BackgroundTransparency = 0.85}, 0.2)
-    UI.tween(tabBtns[name].btn, {TextColor3 = C.text}, 0.2)
-    UI.tween(tabBtns[name].ind, {BackgroundTransparency = 0}, 0.2)
+    local cur = tabBtns[name]
+    UI.tween(cur.btn, {BackgroundTransparency = 0.85}, 0.2)
+    UI.tween(cur.ind, {BackgroundTransparency = 0}, 0.2)
+    if cur.icon then UI.tween(cur.icon, {ImageColor3 = C.accent}, 0.2) end
+    if cur.lbl then UI.tween(cur.lbl, {TextColor3 = C.text}, 0.2) end
 
     -- Show page
     if name == "Settings" then
@@ -416,13 +421,13 @@ tabContainer.BorderSizePixel = 0
 UI.listLayout(tabContainer, 3)
 
 local tabIcons = {
-    Combat = "⚔️",
-    Movement = "💨",
-    Visual = "👁️",
-    Player = "👤",
-    World = "🌍",
-    Misc = "🔧",
-    Settings = "⚙️",
+    Combat   = "rbxassetid://137721700219376",
+    Movement = "rbxassetid://125699255905634",
+    Visual   = "rbxassetid://10596856521",
+    Player   = "rbxassetid://18416804485",
+    World    = "rbxassetid://11395780614",
+    Misc     = "rbxassetid://11435662333",
+    Settings = "rbxassetid://183390140",
 }
 
 for idx, name in ipairs(TABS) do
@@ -431,13 +436,35 @@ for idx, name in ipairs(TABS) do
     btn.BackgroundColor3 = C.accent
     btn.BackgroundTransparency = 1
     btn.BorderSizePixel = 0
-    btn.Text = "  " .. (tabIcons[name] or "") .. "  " .. name
+    btn.Text = ""
     btn.TextColor3 = C.dim
     btn.Font = Enum.Font.GothamSemibold
     btn.TextSize = 12
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.LayoutOrder = idx
     UI.corner(btn, 6)
+
+    -- Icon image
+    local icon = Instance.new("ImageLabel", btn)
+    icon.Name = "Icon"
+    icon.Size = UDim2.new(0, 16, 0, 16)
+    icon.Position = UDim2.new(0, 10, 0.5, -8)
+    icon.BackgroundTransparency = 1
+    icon.Image = tabIcons[name] or ""
+    icon.ImageColor3 = C.dim
+    icon.ScaleType = Enum.ScaleType.Fit
+
+    -- Text label beside icon
+    local lbl = Instance.new("TextLabel", btn)
+    lbl.Name = "Label"
+    lbl.Size = UDim2.new(1, -34, 1, 0)
+    lbl.Position = UDim2.new(0, 32, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = name
+    lbl.TextColor3 = C.dim
+    lbl.Font = Enum.Font.GothamSemibold
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local indicator = Instance.new("Frame", btn)
     indicator.Name = "Ind"
@@ -449,14 +476,20 @@ for idx, name in ipairs(TABS) do
     UI.corner(indicator, 2)
 
     btn.MouseEnter:Connect(function()
-        if activeTab ~= name then UI.tween(btn, {BackgroundTransparency = 0.88}, 0.15) end
+        if activeTab ~= name then
+            UI.tween(btn, {BackgroundTransparency = 0.88}, 0.15)
+            UI.tween(icon, {ImageColor3 = C.text}, 0.15)
+        end
     end)
     btn.MouseLeave:Connect(function()
-        if activeTab ~= name then UI.tween(btn, {BackgroundTransparency = 1}, 0.15) end
+        if activeTab ~= name then
+            UI.tween(btn, {BackgroundTransparency = 1}, 0.15)
+            UI.tween(icon, {ImageColor3 = C.dim}, 0.15)
+        end
     end)
     btn.MouseButton1Click:Connect(function() switchTab(name) end)
 
-    tabBtns[name] = {btn = btn, ind = indicator}
+    tabBtns[name] = {btn = btn, ind = indicator, icon = icon, lbl = lbl}
 end
 
 ---------- GAME DROPDOWN BUTTONS ----------
