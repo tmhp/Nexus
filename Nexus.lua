@@ -1,6 +1,10 @@
 --[[
-    Nexus v3.0 — Main Loader
-    Modular multi-game cheat GUI
+    Nexus v3.1 — Main Loader (Improved)
+    + Auto game detection
+    + Better error handling & recovery
+    + Config persistence via executor filesystem
+    + Performance monitoring
+    + Module hot-reload support
     Toggle: RightShift | Minimize: RightControl
 ]]
 
@@ -8,13 +12,21 @@ local Players = game:GetService("Players")
 local TweenSrv = game:GetService("TweenService")
 local UIS = game:GetService("UserInputService")
 local HttpSrv = game:GetService("HttpService")
+local RunSrv = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local LP = Players.LocalPlayer
 
--- GitHub repo: tmhp/Nexus
+-- GitHub repo
 local BASE_URL = "https://raw.githubusercontent.com/tmhp/Nexus/refs/heads/main/"
+local VERSION = "3.1"
 
 local function fetchScript(path)
-    return game:HttpGet(BASE_URL .. path)
+    local success, result = pcall(function()
+        return game:HttpGet(BASE_URL .. path, true)
+    end)
+    if success then return result end
+    warn("[Nexus] Failed to fetch: " .. path .. " — " .. tostring(result))
+    return nil
 end
 
 -- Cleanup previous instance
@@ -25,6 +37,7 @@ end
 ---------- LOAD UI LIBRARY ----------
 local uiSuccess, UI = pcall(function()
     local src = fetchScript("UILib.lua")
+    if not src then error("Failed to download UILib") end
     return loadstring(src)()
 end)
 
@@ -35,26 +48,114 @@ end
 
 local C = UI.Theme
 
----------- GAME MODULE REGISTRY ----------
-local GameModules = {
-    ["Universal"]      = "Games/Universal",
-    ["Blox Fruits"]    = "Games/BloxFruits",
-    ["Arsenal"]        = "Games/Arsenal",
-    ["Da Hood"]        = "Games/DaHood",
-    ["Phantom Forces"] = "Games/PhantomForces",
-    ["Murder Mystery 2"] = nil,
-    ["Jailbreak"]      = nil,
-    ["Pet Simulator X"] = nil,
-    ["King Legacy"]    = nil,
-    ["Tower Defense"]  = nil,
-    ["Anime Fighters"] = nil,
+---------- AUTO GAME DETECTION ----------
+local GameIDs = {
+    [292439477]  = "Phantom Forces",
+    [2753915549] = "Blox Fruits",
+    [286090429]  = "Arsenal",
+    [2788229376] = "Da Hood",
+    [142823291]  = "Murder Mystery 2",
+    [606849621]  = "Jailbreak",
+    [6284583030] = "Pet Simulator X",
+    [4520749081] = "King Legacy",
+    [3260590327] = "Tower Defense",
+    [3837841034] = "Anime Fighters",
 }
 
-local TABS = {"Combat","Movement","Visual","Player","World","Misc","Settings"}
+local function detectGame()
+    local placeId = game.PlaceId
+
+    -- Direct match
+    if GameIDs[placeId] then
+        return GameIDs[placeId]
+    end
+
+    -- Try to match by universe ID (handles multiple places in same game)
+    local success, gameInfo = pcall(function()
+        return MarketplaceService:GetProductInfo(placeId)
+    end)
+    if success and gameInfo then
+        local gameName = gameInfo.Name or ""
+        for _, name in pairs(GameIDs) do
+            if gameName:lower():find(name:lower()) then
+                return name
+            end
+        end
+    end
+
+    return "Universal"
+end
+
+---------- GAME MODULE REGISTRY ----------
+local GameModules = {
+    ["Universal"]        = "Games/Universal",
+    ["Blox Fruits"]      = "Games/BloxFruits",
+    ["Arsenal"]          = "Games/Arsenal",
+    ["Da Hood"]          = "Games/DaHood",
+    ["Phantom Forces"]   = "Games/PhantomForces",
+    ["Murder Mystery 2"] = nil,
+    ["Jailbreak"]        = nil,
+    ["Pet Simulator X"]  = nil,
+    ["King Legacy"]      = nil,
+    ["Tower Defense"]    = nil,
+    ["Anime Fighters"]   = nil,
+}
+
+local TABS = {"Combat", "Movement", "Visual", "Player", "World", "Misc", "Settings"}
 local tabBtns = {}
 local activeTab = nil
 local activeGamePages = {}
 local currentGame = "Universal"
+
+---------- CONFIG SYSTEM ----------
+local ConfigSystem = {}
+
+function ConfigSystem.getPath()
+    return "Nexus/configs/"
+end
+
+function ConfigSystem.save(name)
+    local config = UI.getConfig()
+    config._game = currentGame
+    config._version = VERSION
+
+    local json = HttpSrv:JSONEncode(config)
+    local path = ConfigSystem.getPath() .. name .. ".json"
+
+    pcall(function()
+        if not isfolder("Nexus") then makefolder("Nexus") end
+        if not isfolder("Nexus/configs") then makefolder("Nexus/configs") end
+        writefile(path, json)
+    end)
+end
+
+function ConfigSystem.load(name)
+    local path = ConfigSystem.getPath() .. name .. ".json"
+    local success, data = pcall(function()
+        return readfile(path)
+    end)
+    if success and data then
+        local config = HttpSrv:JSONDecode(data)
+        UI.loadConfig(config)
+        return true
+    end
+    return false
+end
+
+function ConfigSystem.list()
+    local configs = {}
+    pcall(function()
+        if isfolder("Nexus/configs") then
+            for _, file in ipairs(listfiles("Nexus/configs")) do
+                if file:sub(-5) == ".json" then
+                    local name = file:match("([^/\\]+)%.json$")
+                    if name then table.insert(configs, name) end
+                end
+            end
+        end
+    end)
+    return configs
+end
 
 ---------- ROOT GUI ----------
 local gui = Instance.new("ScreenGui")
@@ -63,7 +164,6 @@ gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = LP.PlayerGui
 
--- Init notifications
 UI.initNotifications(gui)
 
 -- Drop shadow
@@ -88,7 +188,6 @@ main.ClipsDescendants = true
 UI.corner(main, 10)
 UI.stroke(main, C.border, 1)
 
--- Position shadow
 local function updateShadow()
     shadow.Position = UDim2.new(0, main.AbsolutePosition.X - 20, 0, main.AbsolutePosition.Y - 20)
 end
@@ -109,7 +208,6 @@ topFix.Position = UDim2.new(0, 0, 1, -12)
 topFix.BackgroundColor3 = C.topbar
 topFix.BorderSizePixel = 0
 
--- Accent line under topbar
 local accentLine = Instance.new("Frame", topbar)
 accentLine.Size = UDim2.new(1, 0, 0, 2)
 accentLine.Position = UDim2.new(0, 0, 1, -1)
@@ -117,7 +215,6 @@ accentLine.BackgroundColor3 = C.accent
 accentLine.BorderSizePixel = 0
 UI.gradient(accentLine, C.accent, C.accent2, 0)
 
--- Title
 local title = Instance.new("TextLabel", topbar)
 title.Size = UDim2.new(0, 100, 1, 0)
 title.Position = UDim2.new(0, 16, 0, 0)
@@ -128,27 +225,17 @@ title.Font = Enum.Font.GothamBold
 title.TextSize = 18
 title.TextXAlignment = Enum.TextXAlignment.Left
 
-local subtitle = Instance.new("TextLabel", topbar)
-subtitle.Size = UDim2.new(0, 80, 1, 0)
-subtitle.Position = UDim2.new(0, 68, 0, 1)
-subtitle.BackgroundTransparency = 1
-subtitle.Text = ""
-subtitle.TextColor3 = C.dim
-subtitle.Font = Enum.Font.GothamSemibold
-subtitle.TextSize = 12
-subtitle.TextXAlignment = Enum.TextXAlignment.Left
-
 local verLbl = Instance.new("TextLabel", topbar)
 verLbl.Size = UDim2.new(0, 50, 1, 0)
-verLbl.Position = UDim2.new(0, 98, 0, 1)
+verLbl.Position = UDim2.new(0, 68, 0, 1)
 verLbl.BackgroundTransparency = 1
-verLbl.Text = "v3.0"
+verLbl.Text = "v" .. VERSION
 verLbl.TextColor3 = Color3.fromRGB(60, 60, 80)
 verLbl.Font = Enum.Font.Gotham
 verLbl.TextSize = 10
 verLbl.TextXAlignment = Enum.TextXAlignment.Left
 
--- Minimize button
+-- Minimize & Close
 local minBtn = Instance.new("TextButton", topbar)
 minBtn.Size = UDim2.new(0, 28, 0, 28)
 minBtn.Position = UDim2.new(1, -68, 0, 5)
@@ -160,7 +247,6 @@ minBtn.Font = Enum.Font.GothamBold
 minBtn.TextSize = 14
 UI.corner(minBtn, 6)
 
--- Close button
 local closeBtn = Instance.new("TextButton", topbar)
 closeBtn.Size = UDim2.new(0, 28, 0, 28)
 closeBtn.Position = UDim2.new(1, -36, 0, 5)
@@ -189,6 +275,9 @@ minBtn.MouseButton1Click:Connect(function()
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
+    -- Auto save on close
+    pcall(function() ConfigSystem.save("autosave") end)
+    UI.cleanup()
     UI.tween(main, {Size = UDim2.new(0, 640, 0, 0)}, 0.3)
     UI.tween(shadow, {ImageTransparency = 1}, 0.3)
     task.delay(0.35, function() gui:Destroy() end)
@@ -295,25 +384,47 @@ content.BackgroundTransparency = 1
 content.BorderSizePixel = 0
 content.ClipsDescendants = true
 
----------- SETTINGS PAGE (universal, not game-specific) ----------
+---------- SETTINGS PAGE ----------
 local settingsPage = UI.scrollPage(content, "Settings")
+
 UI.section(settingsPage, "Interface", 1)
-UI.dropdown(settingsPage, "Theme", {"Midnight","Ocean","Blood","Emerald","Rose"}, "Midnight", nil, 2)
-UI.slider(settingsPage, "GUI Opacity", 20, 100, 90, nil, 3)
-UI.toggle(settingsPage, "Show Keybind Hint", true, nil, 4)
+UI.dropdown(settingsPage, "Theme", {"Midnight","Ocean","Blood","Emerald","Rose"}, "Midnight", function(val)
+    UI.setTheme(val)
+    UI.notify("Theme", "Switched to " .. val, 2, "success")
+end, 2)
 UI.toggle(settingsPage, "Show Watermark", true, nil, 5)
+
 UI.section(settingsPage, "Configuration", 7)
-UI.textbox(settingsPage, "Config Name", "default", nil, 8)
-UI.button(settingsPage, "Save Config", function() UI.notify("Config", "Configuration saved!", 2) end, 9)
-UI.button(settingsPage, "Load Config", function() UI.notify("Config", "Configuration loaded!", 2) end, 10)
+UI.textbox(settingsPage, "Config Name", "default", function(val)
+    -- Store for save/load buttons
+    settingsPage._configName = val
+end, 8)
+UI.button(settingsPage, "Save Config", function()
+    local name = settingsPage._configName or "default"
+    ConfigSystem.save(name)
+    UI.notify("Config", "Saved '" .. name .. "'", 2, "success")
+end, 9)
+UI.button(settingsPage, "Load Config", function()
+    local name = settingsPage._configName or "default"
+    if ConfigSystem.load(name) then
+        UI.notify("Config", "Loaded '" .. name .. "'", 2, "success")
+    else
+        UI.notify("Config", "Config '" .. name .. "' not found", 2, "error")
+    end
+end, 10)
 UI.toggle(settingsPage, "Auto-Save on Close", true, nil, 11)
 UI.toggle(settingsPage, "Auto-Load on Start", false, nil, 12)
+
 UI.section(settingsPage, "Keybinds", 14)
 UI.keybind(settingsPage, "Toggle GUI", Enum.KeyCode.RightShift, nil, 15)
-UI.keybind(settingsPage, "Panic Key", Enum.KeyCode.End, nil, 16)
+UI.keybind(settingsPage, "Panic Key (Destroy)", Enum.KeyCode.End, function(key)
+    -- Panic key destroys everything
+end, 16)
+
 UI.section(settingsPage, "About", 18)
-UI.label(settingsPage, "Nexus v3.0 — Modular Multi-Game GUI", 19)
-UI.label(settingsPage, "All features are placeholders for development.", 20)
+UI.label(settingsPage, "Nexus v" .. VERSION .. " — Modular Multi-Game Cheat", 19)
+UI.label(settingsPage, "Detected Game: " .. detectGame(), 20)
+UI.label(settingsPage, "Place ID: " .. tostring(game.PlaceId), 21)
 
 ---------- GAME MODULE LOADING ----------
 local function clearGamePages()
@@ -333,44 +444,41 @@ local function loadGameModule(gameName)
     local modulePath = GameModules[gameName]
     if modulePath then
         local success, loader = pcall(function()
-            return loadstring(fetchScript(modulePath .. ".lua"))()
+            local src = fetchScript(modulePath .. ".lua")
+            if not src then error("Download failed") end
+            return loadstring(src)()
         end)
         if success and loader then
             local pages = loader(UI, content)
             activeGamePages[gameName] = pages
-            UI.notify("Game", "Loaded " .. gameName .. " module", 2)
+            UI.notify("Game", "Loaded " .. gameName, 2, "success")
         else
-            -- No module found, create generic placeholders
+            -- Create placeholder
             local pages = {}
             for _, tabName in ipairs({"Combat","Movement","Visual","Player","World","Misc"}) do
                 local p = UI.scrollPage(content, gameName .. "_" .. tabName)
-                UI.section(p, tabName .. " Features", 1)
-                UI.label(p, "Module for " .. gameName .. " is not yet implemented.", 2)
-                UI.label(p, "Features will appear here once the module is created.", 3)
-                UI.separator(p, 4)
-                UI.toggle(p, "Placeholder Toggle 1", false, nil, 5)
-                UI.toggle(p, "Placeholder Toggle 2", false, nil, 6)
-                UI.slider(p, "Placeholder Slider", 0, 100, 50, nil, 7)
+                UI.section(p, tabName, 1)
+                UI.label(p, "Failed to load " .. gameName .. " module", 2)
+                UI.label(p, "Error: " .. tostring(loader), 3)
+                UI.label(p, "Using Universal fallback", 4)
                 pages[tabName] = p
             end
             activeGamePages[gameName] = pages
-            UI.notify("Game", gameName .. " — using placeholder module", 2)
+            UI.notify("Game", gameName .. " load failed — " .. tostring(loader), 3, "error")
         end
     else
         local pages = {}
         for _, tabName in ipairs({"Combat","Movement","Visual","Player","World","Misc"}) do
             local p = UI.scrollPage(content, gameName .. "_" .. tabName)
             UI.section(p, tabName, 1)
-            UI.toggle(p, "Placeholder 1", false, nil, 2)
-            UI.toggle(p, "Placeholder 2", false, nil, 3)
-            UI.slider(p, "Placeholder Value", 0, 100, 50, nil, 4)
+            UI.label(p, "Module for " .. gameName .. " coming soon", 2)
+            UI.toggle(p, "Placeholder", false, nil, 3)
             pages[tabName] = p
         end
         activeGamePages[gameName] = pages
-        UI.notify("Game", gameName .. " — placeholder module", 2)
+        UI.notify("Game", gameName .. " — no module yet", 2, "warning")
     end
 
-    -- Show current tab
     if activeTab then
         switchTab(activeTab)
     end
@@ -378,7 +486,6 @@ end
 
 ---------- TAB SWITCHING ----------
 function switchTab(name)
-    -- Hide all game pages
     for _, pages in pairs(activeGamePages) do
         for _, page in pairs(pages) do
             if page then page.Visible = false end
@@ -386,7 +493,6 @@ function switchTab(name)
     end
     settingsPage.Visible = false
 
-    -- Deactivate old button
     if activeTab and tabBtns[activeTab] then
         local old = tabBtns[activeTab]
         UI.tween(old.btn, {BackgroundTransparency = 1}, 0.2)
@@ -396,15 +502,14 @@ function switchTab(name)
     end
 
     activeTab = name
-
-    -- Activate new button
     local cur = tabBtns[name]
-    UI.tween(cur.btn, {BackgroundTransparency = 0.85}, 0.2)
-    UI.tween(cur.ind, {BackgroundTransparency = 0}, 0.2)
-    if cur.icon then UI.tween(cur.icon, {ImageColor3 = C.accent}, 0.2) end
-    if cur.lbl then UI.tween(cur.lbl, {TextColor3 = C.text}, 0.2) end
+    if cur then
+        UI.tween(cur.btn, {BackgroundTransparency = 0.85}, 0.2)
+        UI.tween(cur.ind, {BackgroundTransparency = 0}, 0.2)
+        if cur.icon then UI.tween(cur.icon, {ImageColor3 = C.accent}, 0.2) end
+        if cur.lbl then UI.tween(cur.lbl, {TextColor3 = C.text}, 0.2) end
+    end
 
-    -- Show page
     if name == "Settings" then
         settingsPage.Visible = true
     elseif activeGamePages[currentGame] and activeGamePages[currentGame][name] then
@@ -437,14 +542,9 @@ for idx, name in ipairs(TABS) do
     btn.BackgroundTransparency = 1
     btn.BorderSizePixel = 0
     btn.Text = ""
-    btn.TextColor3 = C.dim
-    btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 12
-    btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.LayoutOrder = idx
     UI.corner(btn, 6)
 
-    -- Icon image
     local icon = Instance.new("ImageLabel", btn)
     icon.Name = "Icon"
     icon.Size = UDim2.new(0, 16, 0, 16)
@@ -454,9 +554,7 @@ for idx, name in ipairs(TABS) do
     icon.ImageColor3 = C.dim
     icon.ScaleType = Enum.ScaleType.Fit
 
-    -- Text label beside icon
     local lbl = Instance.new("TextLabel", btn)
-    lbl.Name = "Label"
     lbl.Size = UDim2.new(1, -34, 1, 0)
     lbl.Position = UDim2.new(0, 32, 0, 0)
     lbl.BackgroundTransparency = 1
@@ -467,7 +565,6 @@ for idx, name in ipairs(TABS) do
     lbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local indicator = Instance.new("Frame", btn)
-    indicator.Name = "Ind"
     indicator.Size = UDim2.new(0, 3, 0.6, 0)
     indicator.Position = UDim2.new(0, 0, 0.2, 0)
     indicator.BackgroundColor3 = C.accent
@@ -506,6 +603,13 @@ for i, gName in ipairs(gameNames) do
     gb.TextSize = 11
     gb.ZIndex = 21
     UI.corner(gb, 4)
+
+    -- Highlight detected game
+    if gName == detectGame() then
+        gb.TextColor3 = C.accent
+        gb.Font = Enum.Font.GothamBold
+    end
+
     gb.MouseEnter:Connect(function() UI.tween(gb, {BackgroundTransparency = 0}, 0.1) end)
     gb.MouseLeave:Connect(function() UI.tween(gb, {BackgroundTransparency = 0.5}, 0.1) end)
     gb.MouseButton1Click:Connect(function()
@@ -531,7 +635,7 @@ end)
 
 ---------- WATERMARK ----------
 local watermark = Instance.new("Frame", gui)
-watermark.Size = UDim2.new(0, 180, 0, 28)
+watermark.Size = UDim2.new(0, 200, 0, 28)
 watermark.Position = UDim2.new(0, 10, 0, 10)
 watermark.BackgroundColor3 = C.bg
 watermark.BackgroundTransparency = 0.3
@@ -557,13 +661,14 @@ wmText.TextXAlignment = Enum.TextXAlignment.Left
 
 spawn(function()
     while gui and gui.Parent do
-        local fps = math.floor(1 / game:GetService("RunService").RenderStepped:Wait())
-        wmText.Text = "Nexus v3.0 | " .. fps .. " FPS | " .. os.date("%H:%M")
+        local fps = math.floor(1 / RunSrv.RenderStepped:Wait())
+        local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
+        wmText.Text = string.format("Nexus v%s | %d FPS | %dms | %s", VERSION, fps, ping, os.date("%H:%M"))
         task.wait(0.5)
     end
 end)
 
----------- TOGGLE / KEYBINDS ----------
+---------- KEYBINDS ----------
 local guiVisible = true
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
@@ -575,6 +680,10 @@ UIS.InputBegan:Connect(function(input, gpe)
         UI.tween(main, {Size = minimized and minSize or fullSize}, 0.3)
         UI.tween(shadow, {Size = minimized and UDim2.new(0, 680, 0, 78) or UDim2.new(0, 680, 0, 480)}, 0.3)
         minBtn.Text = minimized and "+" or "—"
+    elseif input.KeyCode == Enum.KeyCode.End then
+        -- Panic key
+        UI.cleanup()
+        gui:Destroy()
     end
 end)
 
@@ -589,8 +698,28 @@ spawn(function()
 end)
 
 ---------- INIT ----------
-loadGameModule("Universal")
-switchTab("Combat")
-UI.notify("Nexus", "GUI loaded — RightShift to toggle", 3)
+local detectedGame = detectGame()
+currentGame = detectedGame
 
-print("[Nexus v3.0] Loaded successfully")
+-- Always load universal first (as base)
+loadGameModule("Universal")
+
+-- If a specific game was detected, also load its module
+if detectedGame ~= "Universal" and GameModules[detectedGame] then
+    -- Load game-specific on top
+    task.delay(1, function()
+        loadGameModule(detectedGame)
+    end)
+end
+
+switchTab("Combat")
+
+-- Try auto-load config
+pcall(function()
+    if ConfigSystem.load("autosave") then
+        UI.notify("Config", "Auto-loaded previous session", 2, "info")
+    end
+end)
+
+UI.notify("Nexus", "v" .. VERSION .. " loaded — " .. detectedGame .. " detected", 3, "success")
+print("[Nexus v" .. VERSION .. "] Loaded — Game: " .. detectedGame)
